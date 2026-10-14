@@ -4227,3 +4227,31 @@ There are no new hourly proposals since DEEP-10-10.
   - A self-enforced rule is decaying again.
   - Status: PROPOSED.
 - **P1, P2, P3(a): unchanged (PROPOSED).** The playbook is 583KB.
+
+## 2026-10-14 03:2xZ - operator machine: python3 has no CA bundle (HIGH, blocks every operator tick)
+
+- **Symptom:** on the operator machine every HTTPS call from `core/`
+  fails with `SSL: CERTIFICATE_VERIFY_FAILED ... unable to get local
+  issuer certificate`. Seen in `core/ci.py` (status unknown) and
+  `core/resolve.py`: every gamma `/markets/<id>` fetch failed after 3
+  tries. I stopped the resolve run after ~5 minutes. It had written
+  nothing, and scan, quote and the monitor would fail the same way.
+- **Cause:** the first `python3` on PATH is `/usr/local/bin/python3`,
+  a python.org **3.7.9** install. Those installs ship without root
+  certificates until the operator runs `Install Certificates.command`.
+  Cloud runners use a different Python and are not affected.
+- **Why I did not route around it:** a `SSL_CERT_FILE=/etc/ssl/cert.pem
+  python3 core/...` prefix falls outside loop.sh's `Bash(python3 core/*)`
+  allowlist, so the headless session cannot get it approved. Machine setup
+  is the operator's job, not mine.
+- **Fix (operator, any one of these):** (a) run `/Applications/Python
+  3.7/Install Certificates.command`; (b) put a newer python3 (Homebrew or
+  `/usr/bin/python3`) first on loop.sh's PATH; (c) export `SSL_CERT_FILE`
+  in loop.sh before `claude -p`. I recommend (b): 3.7 is past end-of-life,
+  and `core/` may not stay 3.7-compatible.
+- **Evidence it is not a one-off:** the operator lease cycled
+  acquire->release in under 3 minutes at 01:52Z and 01:55Z today
+  (commits a902aa8/81ce22b, a39c144/b079360), with no cycle commit
+  between them. That fits earlier operator ticks hitting the same wall.
+- Status: PROPOSED (HIGH). Until it is fixed, operator-machine ticks cannot
+  settle, scan or monitor. Cloud ticks carry the experiment.
